@@ -33,71 +33,6 @@ base = 'http://bitworking.org/projects/httplib2/test/'
 cacheDirName = ".cache"
 
 
-class CredentialsTest(unittest.TestCase):
-    def test(self):
-        c = httplib2.Credentials()
-        c.add("joe", "password")
-        self.assertEqual(("joe", "password"), list(c.iter("bitworking.org"))[0])
-        self.assertEqual(("joe", "password"), list(c.iter(""))[0])
-        c.add("fred", "password2", "wellformedweb.org")
-        self.assertEqual(("joe", "password"), list(c.iter("bitworking.org"))[0])
-        self.assertEqual(1, len(list(c.iter("bitworking.org"))))
-        self.assertEqual(2, len(list(c.iter("wellformedweb.org"))))
-        self.assertTrue(("fred", "password2") in list(c.iter("wellformedweb.org")))
-        c.clear()
-        self.assertEqual(0, len(list(c.iter("bitworking.org"))))
-        c.add("fred", "password2", "wellformedweb.org")
-        self.assertTrue(("fred", "password2") in list(c.iter("wellformedweb.org")))
-        self.assertEqual(0, len(list(c.iter("bitworking.org"))))
-        self.assertEqual(0, len(list(c.iter(""))))
-
-
-class ParserTest(unittest.TestCase):
-    def testFromStd66(self):
-        self.assertEqual( ('http', 'example.com', '', None, None ), httplib2.parse_uri("http://example.com"))
-        self.assertEqual( ('https', 'example.com', '', None, None ), httplib2.parse_uri("https://example.com"))
-        self.assertEqual( ('https', 'example.com:8080', '', None, None ), httplib2.parse_uri("https://example.com:8080"))
-        self.assertEqual( ('http', 'example.com', '/', None, None ), httplib2.parse_uri("http://example.com/"))
-        self.assertEqual( ('http', 'example.com', '/path', None, None ), httplib2.parse_uri("http://example.com/path"))
-        self.assertEqual( ('http', 'example.com', '/path', 'a=1&b=2', None ), httplib2.parse_uri("http://example.com/path?a=1&b=2"))
-        self.assertEqual( ('http', 'example.com', '/path', 'a=1&b=2', 'fred' ), httplib2.parse_uri("http://example.com/path?a=1&b=2#fred"))
-        self.assertEqual( ('http', 'example.com', '/path', 'a=1&b=2', 'fred' ), httplib2.parse_uri("http://example.com/path?a=1&b=2#fred"))
-
-
-class UrlNormTest(unittest.TestCase):
-    def test(self):
-        self.assertEqual( "http://example.org/", httplib2.urlnorm("http://example.org")[-1])
-        self.assertEqual( "http://example.org/", httplib2.urlnorm("http://EXAMple.org")[-1])
-        self.assertEqual( "http://example.org/?=b", httplib2.urlnorm("http://EXAMple.org?=b")[-1])
-        self.assertEqual( "http://example.org/mypath?a=b", httplib2.urlnorm("http://EXAMple.org/mypath?a=b")[-1])
-        self.assertEqual( "http://localhost:80/", httplib2.urlnorm("http://localhost:80")[-1])
-        self.assertEqual( httplib2.urlnorm("http://localhost:80/"), httplib2.urlnorm("HTTP://LOCALHOST:80"))
-        try:
-            httplib2.urlnorm("/")
-            self.fail("Non-absolute URIs should raise an exception")
-        except httplib2.RelativeURIError:
-            pass
-
-class UrlSafenameTest(unittest.TestCase):
-    def test(self):
-        # Test that different URIs end up generating different safe names
-        self.assertEqual( "example.org,fred,a=b,58489f63a7a83c3b7794a6a398ee8b1f", httplib2.safename("http://example.org/fred/?a=b"))
-        self.assertEqual( "example.org,fred,a=b,8c5946d56fec453071f43329ff0be46b", httplib2.safename("http://example.org/fred?/a=b"))
-        self.assertEqual( "www.example.org,fred,a=b,499c44b8d844a011b67ea2c015116968", httplib2.safename("http://www.example.org/fred?/a=b"))
-        self.assertEqual( httplib2.safename(httplib2.urlnorm("http://www")[-1]), httplib2.safename(httplib2.urlnorm("http://WWW")[-1]))
-        self.assertEqual( "www.example.org,fred,a=b,692e843a333484ce0095b070497ab45d", httplib2.safename("https://www.example.org/fred?/a=b"))
-        self.assertNotEqual( httplib2.safename("http://www"), httplib2.safename("https://www"))
-        # Test the max length limits
-        uri = "http://" + ("w" * 200) + ".org"
-        uri2 = "http://" + ("w" * 201) + ".org"
-        self.assertNotEqual( httplib2.safename(uri2), httplib2.safename(uri))
-        # Max length should be 200 + 1 (",") + 32
-        self.assertEqual(233, len(httplib2.safename(uri2)))
-        self.assertEqual(233, len(httplib2.safename(uri)))
-        # Unicode
-        if sys.version_info >= (2,3):
-            self.assertEqual( "xn--http,-4y1d.org,fred,a=b,579924c35db315e5a32e3d9963388193", httplib2.safename("http://\u2304.org/fred/?a=b"))
-
 class _MyResponse(io.BytesIO):
     def __init__(self, body, **kwargs):
         io.BytesIO.__init__(self, body)
@@ -175,114 +110,6 @@ class HttpTest(unittest.TestCase):
             [os.remove(os.path.join(cacheDirName, file)) for file in os.listdir(cacheDirName)]
         self.http = httplib2.Http(cacheDirName)
         self.http.clear_credentials()
-
-    def testIPv6NoSSL(self):
-        try:
-          self.http.request("http://[::1]/")
-        except socket.gaierror:
-          self.fail("should get the address family right for IPv6")
-        except socket.error:
-          # Even if IPv6 isn't installed on a machine it should just raise socket.error
-          pass
-
-    def testIPv6SSL(self):
-        try:
-          self.http.request("https://[::1]/")
-        except socket.gaierror:
-          self.fail("should get the address family right for IPv6")
-        except socket.error:
-          # Even if IPv6 isn't installed on a machine it should just raise socket.error
-          pass
-
-    def testConnectionType(self):
-        self.http.force_exception_to_status_code = False
-        response, content = self.http.request("http://bitworking.org", connection_type=_MyHTTPConnection)
-        self.assertEqual(response['content-location'], "http://bitworking.org")
-        self.assertEqual(content, b"the body")
-
-
-    def testBadStatusLineRetry(self):
-        old_retries = httplib2.RETRIES
-        httplib2.RETRIES = 1
-        self.http.force_exception_to_status_code = False
-        try:
-            response, content = self.http.request("http://bitworking.org",
-                connection_type=_MyHTTPBadStatusConnection)
-        except http.client.BadStatusLine:
-            self.assertEqual(2, _MyHTTPBadStatusConnection.num_calls)
-        httplib2.RETRIES = old_retries
-
-
-    def testGetUnknownServer(self):
-        self.http.force_exception_to_status_code = False
-        try:
-            self.http.request("http://fred.bitworking.org/")
-            self.fail("An httplib2.ServerNotFoundError Exception must be thrown on an unresolvable server.")
-        except httplib2.ServerNotFoundError:
-            pass
-
-        # Now test with exceptions turned off
-        self.http.force_exception_to_status_code = True
-
-        (response, content) = self.http.request("http://fred.bitworking.org/")
-        self.assertEqual(response['content-type'], 'text/plain')
-        self.assertTrue(content.startswith(b"Unable to find"))
-        self.assertEqual(response.status, 400)
-
-    def testGetConnectionRefused(self):
-        self.http.force_exception_to_status_code = False
-        try:
-            self.http.request("http://localhost:7777/")
-            self.fail("An socket.error exception must be thrown on Connection Refused.")
-        except socket.error:
-            pass
-
-        # Now test with exceptions turned off
-        self.http.force_exception_to_status_code = True
-
-        (response, content) = self.http.request("http://localhost:7777/")
-        self.assertEqual(response['content-type'], 'text/plain')
-        self.assertTrue(b"Connection refused" in content)
-        self.assertEqual(response.status, 400)
-
-    def testGetIRI(self):
-        if sys.version_info >= (2,3):
-            uri = urllib.parse.urljoin(base, "reflector/reflector.cgi?d=\N{CYRILLIC CAPITAL LETTER DJE}")
-            (response, content) = self.http.request(uri, "GET")
-            d = self.reflector(content)
-            self.assertTrue('QUERY_STRING' in d)
-            self.assertTrue(d['QUERY_STRING'].find('%D0%82') > 0)
-
-    def testGetIsDefaultMethod(self):
-        # Test that GET is the default method
-        uri = urllib.parse.urljoin(base, "methods/method_reflector.cgi")
-        (response, content) = self.http.request(uri)
-        self.assertEqual(response['x-method'], "GET")
-
-    def testDifferentMethods(self):
-        # Test that all methods can be used
-        uri = urllib.parse.urljoin(base, "methods/method_reflector.cgi")
-        for method in ["GET", "PUT", "DELETE", "POST"]:
-            (response, content) = self.http.request(uri, method, body=b" ")
-            self.assertEqual(response['x-method'], method)
-
-    def testHeadRead(self):
-        # Test that we don't try to read the response of a HEAD request
-        # since httplib blocks response.read() for HEAD requests.
-        # Oddly enough this doesn't appear as a problem when doing HEAD requests
-        # against Apache servers.
-        uri = "http://www.google.com/"
-        (response, content) = self.http.request(uri, "HEAD")
-        self.assertEqual(response.status, 200)
-        self.assertEqual(content, b"")
-
-    def testGetNoCache(self):
-        # Test that can do a GET w/o the cache turned on.
-        http = httplib2.Http()
-        uri = urllib.parse.urljoin(base, "304/test_etag.txt")
-        (response, content) = http.request(uri, "GET")
-        self.assertEqual(response.status, 200)
-        self.assertEqual(response.previous, None)
 
     def testGetOnlyIfCachedCacheHit(self):
         # Test that can do a GET with cache and 'only-if-cached'
@@ -1235,7 +1062,7 @@ class HttpPrivateTest(unittest.TestCase):
         self.assertTrue('cache-control' in h)
         self.assertTrue('other' in h)
         self.assertEqual('Stuff', h['other'])
-    
+
     def testConvertByteStr(self):
         with self.assertRaises(TypeError):
             httplib2._convert_byte_str(4)
