@@ -298,6 +298,13 @@ def _normalize_headers(headers):
     )
 
 
+def _formalize_headers(headers):
+    return {
+        '-'.join([word.capitalize() for word in key.split('-')]): value
+        for key, value in headers.items()
+    }
+
+
 def _convert_byte_str(s):
     if not isinstance(s, str):
         return str(s, "utf-8")
@@ -1576,6 +1583,8 @@ class Http(object):
     def _conn_request(self, conn, request_uri, method, body, headers):
         i = 0
         seen_bad_status_line = False
+        headers = _formalize_headers(headers)
+
         while i < RETRIES:
             i += 1
             try:
