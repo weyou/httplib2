@@ -155,7 +155,7 @@ class CookieJar(object):
                 )
                 fd.write(cookie_line + "\n")
 
-    def set(self, cookie, value=None, **kwargs):
+    def set(self, cookie, value=None, domain=None, path=None, max_age=None, expires=None, secure=False):
         """Put a new cookie or update the existing cookie to this cookie jar.
 
         cookie:
@@ -165,7 +165,8 @@ class CookieJar(object):
         """
         if not isinstance(cookie, Cookie):
             assert cookie is not None and value is not None, "name and value must be given to create a cookie"
-            cookie = Cookie.create(cookie, value, **kwargs)
+            cookie = Cookie.create(cookie, value, domain, path, max_age, expires, secure)
+
         path_cookies = self._cookies.setdefault(cookie.domain, {}).setdefault(cookie.path, {})
         path_cookies[cookie.name] = cookie
 
@@ -232,48 +233,52 @@ class CookieJar(object):
 
         No error if no matching cookie found.
         """
-        try:
-            if name is not None:
-                assert domain and path, "domain and path must be given to remove a cookie by name"
-                path = Cookie.normalize_path(path)
+        if name is not None:
+            assert domain and path, "domain and path must be given to remove a cookie by name"
+            path = Cookie.normalize_path(path)
+            try:
                 del self._cookies[domain][path][name]
-                return
-
-            if path is not None:
-                assert domain, "domain must be given to remove cookies by path"
-                path = Cookie.normalize_path(path)
+            except KeyError:
+                pass
+        elif path is not None:
+            assert domain, "domain must be given to remove cookies by path"
+            path = Cookie.normalize_path(path)
+            try:
                 del self._cookies[domain][path]
-                return
-
-            if domain is not None:
+            except KeyError:
+                pass
+        elif domain is not None:
+            try:
                 del self._cookies[domain]
-                return
-        except KeyError:
+            except KeyError:
+                pass
             return
-
-        self._cookies = {}
+        else:
+            self._cookies = {}
 
         if self.filename:
-            self.save()
+            self.save(self.filename)
 
-    def _match_path(self, request_uri, cookie_path):
-        return cookie_path[:-1] == request_uri or request_uri.startswith(cookie_path)
+    @staticmethod
+    def _match_path(uri, path):
+        return path[:-1] == uri or uri.startswith(path)
 
-    def _match_domain(self, request_host, cookie_domain):
-        if cookie_domain.startswith("."):
-            return cookie_domain == "." or request_host.endswith(cookie_domain)
-        return request_host == cookie_domain
+    @staticmethod
+    def _match_domain(host, domain):
+        if domain.startswith("."):
+            return domain == "." or host.endswith(domain)
+        return host == domain
 
-    def get_header(self, request_host, request_uri, is_https):
+    def get_header(self, host, uri, is_https):
         """Get the Cookie header to be applied to the request."""
-        cookie_header = []
+        parts = []
 
         for domain, domain_cookies in self._cookies.items():
-            if not self._match_domain(request_host, domain):
+            if not self._match_domain(host, domain):
                 continue
 
             for path, cookies in domain_cookies.items():
-                if not self._match_path(request_uri, path):
+                if not self._match_path(uri, path):
                     continue
 
                 for cookie in cookies.values():
@@ -283,9 +288,9 @@ class CookieJar(object):
                     if cookie.secure and not is_https:
                         continue
 
-                    cookie_header.append("{0}={1}".format(cookie.name, cookie.value))
+                    parts.append("{0}={1}".format(cookie.name, cookie.value))
 
-        return "; ".join(cookie_header)
+        return "; ".join(parts)
 
     @staticmethod
     def parse_iter(header):
@@ -338,7 +343,7 @@ class CookieJar(object):
 
             yield cookie
 
-    def extract_header(self, request_host, request_uri, header):
+    def extract_header(self, host, uri, header):
         """Extract cookies from HTTP-style header(Set-Cookie) and save them
         to cookie jar.
 
@@ -346,8 +351,8 @@ class CookieJar(object):
         disable the cookie.
         """
         for cookie in self.parse_iter(header):
-            domain = cookie.get("domain", request_host)
-            path = cookie.get("path", os.path.dirname(request_uri))
+            domain = cookie.get("domain", host)
+            path = cookie.get("path", os.path.dirname(uri))
 
             cookie = Cookie.create(
                 cookie["name"],
@@ -363,14 +368,6 @@ class CookieJar(object):
 
 
 class NullCookieJar(object):
-    def __init__(self):
-        pass
-
-    def load(self, filename):
-        pass
-
-    def save(self, filename):
-        pass
 
     def set(self, cookie, value=None, **kwargs):
         pass
@@ -385,7 +382,7 @@ class NullCookieJar(object):
     def clear(self, domain=None, path=None, name=None):
         pass
 
-    def get_header(self, request_host, request_uri, is_https):
+    def get_header(self, host, uri, is_https):
         return ""
 
     @staticmethod
@@ -393,5 +390,5 @@ class NullCookieJar(object):
         return
         yield
 
-    def extract_header(self, request_host, request_uri, header):
+    def extract_header(self, host, uri, header):
         pass

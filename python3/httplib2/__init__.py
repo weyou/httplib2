@@ -1560,14 +1560,13 @@ class Http(object):
         self.credentials.clear()
         self.authorizations = []
 
-    def _set_cookie_header(
-            self, headers, request_host, request_uri, is_https, cookies):
+    def _set_cookie_header(self, headers, host, uri, is_https, cookies):
         # Add one-time cookies provided by request parameter
-        cookie_list = ['{0}={1}'.format(n, v) for n, v in cookies.items()]
+        cookie_list = ['{0}={1}'.format(n, v) for n, v in cookies.items()] \
+            if cookies else []
 
         # Add the cookies matched in cookie jar
-        cookie_header = self.cookie_jar.get_header(
-            request_host, request_uri, is_https)
+        cookie_header = self.cookie_jar.get_header(host, uri, is_https)
         if cookie_header:
             cookie_list.append(cookie_header)
 
@@ -1873,8 +1872,7 @@ class Http(object):
             if "range" not in headers and "accept-encoding" not in headers:
                 headers["accept-encoding"] = "gzip, deflate"
 
-            self._set_cookie_header(headers, conn.host, request_uri,
-                                    scheme == 'https', cookies or {})
+            self._set_cookie_header(headers, conn.host, request_uri, scheme == 'https', cookies)
 
             info = email.message.Message()
             cachekey = None
