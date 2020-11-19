@@ -252,9 +252,8 @@ class CookieJar(object):
                 del self._cookies[domain]
             except KeyError:
                 pass
-            return
         else:
-            self._cookies = {}
+            self._cookies.clear()
 
         if self.filename:
             self.save(self.filename)
