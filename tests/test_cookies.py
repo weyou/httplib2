@@ -335,13 +335,13 @@ def test_cookie_manager_enabled(cookie_header, cookie_http):
 
         if isinstance(cookie_header, (list, tuple)):
             cookie_header = ", ".join(cookie_header)
-        set_cookies = {ck["name"]: ck["value"] for ck in httplib2.CookieJar.parse_iter(cookie_header)}
-        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == set_cookies
+        expect_cookies = {ck["name"]: ck["value"] for ck in httplib2.CookieJar.parse_iter(cookie_header)}
+        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == expect_cookies
 
 
 def test_cookie_manager_expire(cookie_http):
-    expires = (datetime.utcnow() + timedelta(seconds=10)).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    cookie_header = ("A=1", "B=2; Max-Age=5", "C=3; Expires={}".format(expires))
+    expires = (datetime.utcnow() + timedelta(seconds=2)).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    cookie_header = ("A=1", "B=2; Max-Age=1", "C=3; Expires={}".format(expires))
     handler = tests.http_reflect_with_cookies({"/login": cookie_header})
 
     with tests.server_request(handler, request_count=4, timeout=20) as uri:
@@ -353,17 +353,17 @@ def test_cookie_manager_expire(cookie_http):
         response, content = cookie_http.request(op_url, "POST", body="op request 1")
         assert response.status == 200
 
-        time.sleep(5)
+        time.sleep(1)
         response, content = cookie_http.request(op_url, "POST", body="op reques 2")
         assert response.status == 200
-        set_cookies = {"A": "1", "C": "3"}
-        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == set_cookies
+        expect_cookies = {"A": "1", "C": "3"}
+        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == expect_cookies
 
-        time.sleep(5)
+        time.sleep(1)
         response, content = cookie_http.request(op_url, "POST", body="op reques 3")
         assert response.status == 200
-        set_cookies = {"A": "1"}
-        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == set_cookies
+        expect_cookies = {"A": "1"}
+        assert dict([ck.split("=") for ck in content.decode().split("; ")]) == expect_cookies
 
 
 class HttpConnectionWithDNSResolve(httplib2.HTTPConnectionWithTimeout):
